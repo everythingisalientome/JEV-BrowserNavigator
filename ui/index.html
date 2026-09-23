@@ -273,6 +273,7 @@ es.onmessage = (msg) => {
       $('reqView').textContent = 'Step ' + ev.step + ' · request\n' + JSON.stringify(ev.request, null, 2) + '\n\nanswers\n' + JSON.stringify(ev.raw_answers, null, 2); break;
     case 'decision': {
       $('current').hidden = false;
+      if (ev.model) $('modelName').textContent = ev.model.toUpperCase();
       const op = ev.operation.value, tg = ev.target ? ev.target.value : null;
       chosen = tg ? String(tg).split(':')[0] : null; drawOverlay();
       $('curTitle').textContent = `Step ${ev.step} · ${op}` + (tg ? ' → ' + elemLabel(tg) : '') + (ev.value ? ' ← ' + ev.value.value : '') + `  ·  ${ev.latency_ms} ms`;
@@ -280,7 +281,7 @@ es.onmessage = (msg) => {
       $('verifyLabel').textContent = ev.verifying ? 'VERIFYING: ' + ev.verifying : 'VERIFYING PREVIOUS STEP (none yet)';
       $('flags').replaceChildren();
       for (const [k, v] of Object.entries(ev.flags || {})) {
-        const hot = (k === 'unexpected_change' || k === 'human_review_required') && v >= 0.5;
+        const hot = (k === 'unexpected_change' && v >= 0.75) || (k === 'human_review_required' && v >= 0.75);
         const f = el('div', 'flag' + (hot ? ' hot' : '')); f.append(el('span', null, k), el('span', null, 'p ' + fmtP(v))); $('flags').append(f);
       }
       if (ev.verdict.verdict !== 'ACT') addRow('·', ev.verdict.verdict, ev.verdict.reason, '', ev.verdict.verdict === 'ESCALATE' ? 'esc' : 'bad');
@@ -321,10 +322,10 @@ es.onmessage = (msg) => {
 
 function renderPolicy() {
   fetch('/aop').then(r => r.json()).then(a => {
-    const p = Object.assign({min_operation_p: .8, min_target_p: .8, flag_halt_p: .5}, (a.global_config || {}).policy || {});
+    const p = Object.assign({min_operation_p: .8, min_operation_p_read_only: .5, min_target_p: .8, min_target_p_read_only: .5, flag_halt_p: .75, human_review_halt_p: .75}, (a.global_config || {}).policy || {});
     const node = Object.values(a.workflow_graph.nodes).find(n => n.kind === 'ui_task') || {};
-    const rows = [['Act if operation p ≥', p.min_operation_p.toFixed(2)], ['Act if target p ≥', p.min_target_p.toFixed(2)],
-      ['Hand off if unexpected_change ≥', p.flag_halt_p.toFixed(2)], ['Side effects', node.side_effects === 'none' ? 'none (read-only)' : 'gated']];
+    const rows = [['Act if operation p ≥', node.side_effects === 'none' ? (p.min_operation_p_read_only || .5).toFixed(2) + ' (read-only node)' : p.min_operation_p.toFixed(2)], ['Act if target p ≥', node.side_effects === 'none' ? (p.min_target_p_read_only || .5).toFixed(2) + ' (read-only node)' : p.min_target_p.toFixed(2)],
+      ['Hand off if unexpected_change ≥', p.flag_halt_p.toFixed(2) + ' (0.50 if readback failed)'], ['Hand off if human_review ≥', (p.human_review_halt_p || .75).toFixed(2)], ['Side effects', node.side_effects === 'none' ? 'none (read-only)' : 'gated']];
     $('policy').replaceChildren(...rows.map(([k, v]) => { const d = el('div', 'kv'); d.append(el('span', null, k), el('span', null, v)); return d; }),
       el('div', 'note', 'Below threshold: escalate to gpt-4o-mini for a subgoal or new candidates. Jev still makes the pick.'));
     policyShown = true;

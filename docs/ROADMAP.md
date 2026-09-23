@@ -4,20 +4,27 @@
 
 | Phase | Deliverable | Status |
 |---|---|---|
-| P0 | Probe Jev response shape on OpenRouter (`scripts/probe_jev.py`) | **Script ready; not yet run** |
+| P0 | Probe Jev response shape on OpenRouter (`scripts/probe_jev.py`) | **Done 2026-09-23**: full distributions, `usage` with cost, noul = `{"noul": p}`; expected answers hit (TYPE_TEXT 0.98, target 1.00, city_state 1.00); see D21 |
 | P1 | Target app | wellsfargo.com mortgage-rates flow; discovery walk done (`docs/DISCOVERY_WF.md`) |
 | P2 | Observer + fixture tests | Done (offline) |
 | P3 | Jev question builder + tolerant parser | Done; noul question shape unconfirmed |
 | P4 | Executor, readback, policy, guards, `run_ui_task` | Done (offline) |
 | P5 | Escalation (gpt-4o-mini), locator validation | Done (offline, scripted stand-in) |
 | P6 | Presentation UI (screencast, SSE, metrics) | Done; not yet seen against a live run |
-| P7 | Evidence runs | Not started |
+| P7 | Evidence runs | Run #1 done (see log below); 4 more after D22 |
+
+## Live run log (measured)
+
+| # | Date | Outcome | Steps | Jev req | Median ms | Tokens | Cost | Escalations | Notes |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | 2026-09-23 | HANDOFF at step 5 | 1 executed | 5 | 461 | 38,040 | $0.0016 | 3 (6.5 s) | Op-threshold 0.80 escalated a CLICK-vs-no-op-SELECT split; step 2 pick correct at p=1.00; LLM selector rejected by validation. Led to D22. |
+| 2 | 2026-09-23 | BLOCKED at step 4 (no progress) | 3 executed, 0 verified | 4 | 408 | 29,069 | $0.0012 | 1 (1.5 s) | Jev chose nav link "Home Loans" (0.76, then 1.0); the link opens a hover menu, not a page; three no-effect clicks. gpt-4o-mini endorsed the same route. Led to D23, D24. |
+| 3 | 2026-09-23 | HANDOFF at step 3 (flag) | 2 executed, 2 verified | 3 | 380 | 21,928 | $0.0009 | 0 | Card picked at 0.99, Go at 0.77 → rates page reached. unexpected_change = 0.50 on the navigation halted the run; next pick (Change rate inputs 0.67) was correct. Led to D25. |
+| 4 | 2026-09-23 | HANDOFF at step 14 | 10 executed, 10 verified | 14 | 363 | 56,167 | $0.0024 | 3 (4.9 s) | Reached the inputs dialog; city typed and suggestion clicked correctly; then county typed into City (hidden dependency) and "Mecklenburg, NY" chosen; LLM repeated an invalid locator 3×. Led to D26 (node split), D27 (escalation dedupe). |
 
 ## Next steps, in order
 
-1. **Run P0.** Adjust `jev.build_request` / `parse_choice` to the real shapes. Confirm whether `usage` is
-   returned (cost measured vs estimated).
-2. **First live run** on wellsfargo.com, headed, demo profile. Record: success, steps, requests, median
+1. **First live run** on wellsfargo.com, headed, demo profile. Record: success, steps, requests, median
    latency, tokens, escalations, time buckets.
 3. **Rule ablation.** Remove AOP `rules` one at a time and re-run; record which rules Jev actually needs.
    This is the most useful evidence for leadership (how much site knowledge the AOP must carry).

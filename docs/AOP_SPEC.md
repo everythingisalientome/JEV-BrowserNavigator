@@ -9,7 +9,7 @@ class names or implementation names. The runtime (`navigator/runner.py` now, Lan
 |---|---|
 | `procedure_id`, `version`, `description` | identity; bump `version` on every change |
 | `global_config.escalation.model` | escalation LLM (default `openai/gpt-4o-mini`) |
-| `global_config.policy` | overrides for `min_operation_p`, `min_target_p`, `hard_floor_p`, `irreversible_min_p`, `flag_halt_p`, `max_escalations`, `max_steps`, `no_progress_steps` |
+| `global_config.policy` | overrides for `min_operation_p`, `min_operation_p_read_only`, `min_target_p_read_only`, `flag_halt_p_readback_failed`, `min_target_p`, `hard_floor_p`, `irreversible_min_p`, `flag_halt_p`, `human_review_halt_p`, `max_escalations`, `max_steps`, `no_progress_steps` |
 | `variables_schema.required/optional` | `{name: {type, origin: user_strict|system_captured, default?}}`; run-time overrides replace defaults |
 | `workflow_graph.start_node`, `workflow_graph.nodes` | the graph |
 

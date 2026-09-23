@@ -18,9 +18,15 @@ Return ONLY a JSON object:
  "subgoal": "<the immediate next objective in plain words, or null>",
  "candidates": [{"locator": "<Playwright locator>", "why": "<short>"}],
  "handoff": <true if a person must take over>}
-Locator rules: use Playwright syntax that pierces shadow DOM, e.g. role=button[name="Use as entered"],
-text="Charlotte, NC", or a CSS selector. Do NOT use XPath. Propose candidates only for elements that are
-missing from the element table. Never propose irreversible actions (submit, delete, confirm payment)."""
+Locator rules: Playwright syntax only, exactly one of these forms:
+  role=button[name="Check rates opens dropdown"]     (role + accessible name; preferred)
+  text="Charlotte, NC"                               (exact visible text)
+  #some-id  or  .some-class                          (CSS, only if the HTML shows a stable id/class)
+Never XPath. Never CSS attribute guesses like button[name=...] (buttons have no name attribute).
+Propose candidates ONLY for elements missing from the element table; if the right element is already in
+the table, return no candidates and put the direction in "subgoal".
+If the goal or subgoal is already satisfied on this page, say so in "diagnosis" and give the NEXT objective.
+Never propose irreversible actions (submit, delete, confirm payment)."""
 
 EXTRACT_SYSTEM = """Extract label/value pairs from the text. Return ONLY JSON:
 {"fields": [{"field": "<label as written>", "value": "<value exactly as written>"}]}

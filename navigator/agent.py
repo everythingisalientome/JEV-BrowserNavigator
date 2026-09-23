@@ -83,6 +83,8 @@ async def run_ui_task(node: dict, variables: dict, rt) -> dict:
     history, prev, subgoal = [], None, None
     escalations_used = done_rejections = 0
     extra_rows = []
+    cooldown: dict[tuple, int] = {}
+    last_escalation: tuple | None = None  # D27: (subgoal, adopted) of the previous escalation  # D23: (role,label,section) -> steps left unavailable after a no-effect CLICK
 
     if node.get("start_url") and b.page.url.rstrip("/") != node["start_url"].rstrip("/"):
         await b.page.goto(node["start_url"], wait_until="domcontentloaded")
@@ -90,7 +92,10 @@ async def run_ui_task(node: dict, variables: dict, rt) -> dict:
     rt.emit("observation", {"obs": obs})
 
     for step in range(1, cfg["max_steps"] + 1):
-        obs_for_jev = {**obs, "elements": obs["elements"] + extra_rows}
+        cooldown = {k: n - 1 for k, n in cooldown.items() if n > 1}
+        elements = [({**e, "operations": [], "note": "click had no visible effect; not offered this step"}
+                     if (e["role"], e["label"], e.get("section", "")) in cooldown else e) for e in obs["elements"]]
+        obs_for_jev = {**obs, "elements": elements + extra_rows}
         eff_goal = goal + (f"\nCurrent subgoal: {subgoal}" if subgoal else "")
         t = time.perf_counter()
         try:
@@ -105,9 +110,10 @@ async def run_ui_task(node: dict, variables: dict, rt) -> dict:
         m.input_tokens += d["input_tokens"]
         m.tokens_measured &= d["tokens_measured"]
 
+        d["prev_ok"] = prev.get("ok") if prev else None
         verdict = policy.judge(d, node, obs_for_jev, cfg, escalations_used)
         rt.emit("jev_request", {"step": step, "request": d["request"], "raw_answers": d["raw"].get("answers", d["raw"])})
-        rt.emit("decision", {"step": step, "operation": d["operation"], "target": d["target"], "value": d["value"],
+        rt.emit("decision", {"step": step, "model": d["raw"].get("model"), "operation": d["operation"], "target": d["target"], "value": d["value"],
                              "flags": d["flags"], "verifying": prev and prev["describe"], "latency_ms": d["latency_ms"],
                              "input_tokens": d["input_tokens"], "verdict": verdict, "metrics": m.snapshot()})
 
@@ -141,6 +147,10 @@ async def run_ui_task(node: dict, variables: dict, rt) -> dict:
                                    "metrics": m.snapshot()})
             if out.get("handoff"):
                 return {"status": "HANDOFF", "reason": out.get("diagnosis") or "escalation requested handoff", "outputs": {}}
+            key = (out.get("subgoal"), tuple(r["locator"] for r in adopted))
+            if key == last_escalation and not adopted:
+                return {"status": "HANDOFF", "reason": "escalation repeated the same direction with no new candidates", "outputs": {}}
+            last_escalation = key
             prev = None
             continue
 
@@ -213,6 +223,8 @@ async def run_ui_task(node: dict, variables: dict, rt) -> dict:
         extra_rows = []
         changed = after["fingerprint"] != obs["fingerprint"]
         history.append({"step": step, "action": desc, "readback": detail, "page_changed": changed})
+        if op == "CLICK" and not ok and tgt_el:
+            cooldown[(tgt_el["role"], tgt_el["label"], tgt_el.get("section", ""))] = 3  # this step + next two
         rt.emit("action", {"step": step, "describe": desc, "ok": ok, "readback": detail, "retry_safe": policy.RETRY_SAFE.get(op),
                            "ms": round(spent * 1000), "metrics": m.snapshot()})
         rt.emit("observation", {"obs": after})
@@ -224,6 +236,6 @@ async def run_ui_task(node: dict, variables: dict, rt) -> dict:
         recent = history[-cfg["no_progress_steps"]:]
         if len(recent) == cfg["no_progress_steps"] and all(not h.get("page_changed") and "WAIT" not in h.get("action", "") for h in recent):
             return {"status": "BLOCKED", "reason": "no progress for 3 steps", "outputs": {}}
-        prev = {"describe": desc}
+        prev = {"describe": desc, "readback": detail, "ok": ok, "url_before": obs["url"], "url_after": after["url"]}
         obs = after
     return {"status": "BLOCKED", "reason": f"step budget ({cfg['max_steps']}) exhausted", "outputs": {}}

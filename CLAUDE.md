@@ -37,7 +37,7 @@ Both test suites must pass before any change is considered done. They need no ne
 | `navigator/escalate.py` | Escalation LLM (gpt-4o-mini): direction only |
 | `navigator/runner.py` | AOP graph runner (stand-in for LangGraph), event bus, data tasks |
 | `server.py`, `ui/index.html` | Demo server (stdlib) and page: `/screen` MJPEG, `/events` SSE, `POST /run` |
-| `docs/DISCOVERY_PROMPT.md` | Prompt for walking a new app with Claude in Chrome to produce an AOP |
+| `DISCOVERY_PROMPT.md` | Prompt for walking a new app with Claude in Chrome to produce an AOP |
 
 ## Invariants: do not break these
 
@@ -81,7 +81,5 @@ Both test suites must pass before any change is considered done. They need no ne
 
 ## Known unverified items (check before relying on them)
 
-- OpenRouter Jev response shape: full distribution vs value+probability, `usage` presence, and the exact
-  `noul` question format (align with the team's working email-classification demo). Run `scripts/probe_jev.py`.
 - Live wellsfargo.com run with real Jev; headed Chromium on Windows; bot detection with the Playwright profile.
 - Which AOP `rules` Jev actually needs (run the rule-ablation experiment in `docs/ROADMAP.md`).

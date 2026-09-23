@@ -31,11 +31,11 @@ RULES = [
     "Prefer exact label matches over similar-looking items.",
 ]
 
-VERIFY_QUESTIONS = {
-    "step_completed": "The previous action took effect on the page.",
-    "expected_state_reached": "The page is now in the state the previous action was meant to produce.",
-    "unexpected_change": "Something changed that the previous action should not have caused (an error, a wrong page, a different record, lost input).",
-    "human_review_required": "A person should look at this page before the task continues.",
+VERIFY_QUESTIONS = {  # asked as noul questions: the answer is P(true)
+    "step_completed": "Did the previous action take effect on the page?",
+    "expected_state_reached": "Given the goal, is the page now in the state the previous action was meant to produce (the intended dialog, field value, or page is showing)?",
+    "unexpected_change": "Did something change that the previous action should not have caused (an error, a wrong page, a different record, lost input)?",
+    "human_review_required": "Does the page show an error message, a login or verification challenge, a blocked or failed action, or a different customer or record than the goal intends, so that a person must look before the task continues?",
 }
 
 
@@ -55,7 +55,7 @@ def http_post(url: str, body: dict, key: str, timeout: float = 30.0) -> dict:
             if e.code in (429, 502, 503, 529) and attempt < 2:
                 time.sleep(0.5 * 2 ** attempt)
                 continue
-            raise JevError(f"HTTP {e.code} from model provider; no action executed: {e.read()[:300]!r}") from None
+            raise JevError(f"HTTP {e.code} from model provider; no action executed: {e.read()[:3000].decode(errors='replace')}") from None
         except urllib.error.URLError as e:
             raise JevError(f"Model connection failed; no action executed: {e.reason}") from None
     raise JevError("Model unavailable; no action executed.")
@@ -80,47 +80,60 @@ def available_operations(obs: dict, has_inputs: bool) -> dict:
 
 
 def target_candidates(obs: dict) -> dict:
-    """{operation: {target_id: element-summary}} — each operation has only its valid targets."""
+    """{operation: {target_id: one-line description}} — each operation has only its valid targets.
+    Criteria values are plain strings (the shape the working email demo uses)."""
     heads = {}
     for e in obs["elements"]:
-        base = {"element": f"[{e['index']}] {e['role']} \"{e['label']}\"", "section": e.get("section", "")}
+        parts = [f"[{e['index']}] {e['role']} \"{e['label']}\""]
+        if e.get("section"):
+            parts.append(f"in {e['section']}")
         for k in ("value", "checked", "selected", "expanded"):
-            if k in e:
-                base[k] = e[k]
+            if k in e and e[k] not in ("", None):
+                parts.append(f"{k}={e[k]!r}")
         if e.get("in_viewport") is False:
-            base["in_viewport"] = False
+            parts.append("(off-screen)")
+        base = " ".join(parts)
         for op in e.get("operations", []):
-            if op == "SELECT":
+            if op == "SELECT":  # D22: never offer the already-selected option (a no-op)
                 for o in e["options"]:
-                    heads.setdefault(op, {})[o["index"]] = {**base, "option": o["label"]}
+                    if o["label"] != e.get("value"):
+                        heads.setdefault(op, {})[o["index"]] = f"{base} → option \"{o['label']}\""
             else:
                 heads.setdefault(op, {})[e["index"]] = base
     return heads
 
 
+def _instructions(goal: str, rules: list, extra: str = "") -> str:
+    text = f"Goal: {goal}\nRules: " + " ".join(f"({i + 1}) {r}" for i, r in enumerate(RULES + list(rules or [])))
+    return text + (f"\n{extra}" if extra else "")
+
+
 def build_request(obs: dict, goal: str, rules: list, inputs: dict, history: list, prev: dict | None) -> tuple[dict, dict, dict]:
     ops = available_operations(obs, bool(inputs))
     heads = {k: v for k, v in target_candidates(obs).items() if k in ops}
-    instructions = {"goal": goal, "rules": RULES + list(rules or [])}
-    questions = {"operation": {"type": "choice", "criteria": ops, "instructions": instructions}}
+    questions = {"operation": {"type": "choice", "criteria": ops,
+                               "instructions": _instructions(goal, rules, "Which operation comes next?")}}
     for op, cands in heads.items():
         questions[op.lower() + "_target"] = {
             "type": "choice", "criteria": cands,
-            "instructions": {**instructions, "operation": op},
+            "instructions": _instructions(goal, rules, f"If the operation is {op}, which element is the target?"),
         }
     if "TYPE_TEXT" in ops and inputs:
         questions["type_text_value"] = {
             "type": "choice",
             "criteria": {name: f"{name} = {value!r}" for name, value in inputs.items()},
-            "instructions": {**instructions, "question": "Which task input belongs in the chosen text field?"},
+            "instructions": _instructions(goal, rules, "Which task input belongs in the text field being filled?"),
         }
-    if prev:
-        ctx = {"previous_action": prev["describe"], "intent": goal}
+    if prev:  # verification of the PREVIOUS step, folded into this request (noul = P(true), no criteria)
+        ctx = (f"Previous action: {prev['describe']}. Code readback after it: {prev.get('readback', 'n/a')}"
+               f"{'; the URL changed to ' + prev['url_after'] if prev.get('url_after') and prev.get('url_after') != prev.get('url_before') else ''}. "
+               "Navigating to a new page, opening a dialog or menu, and fields recalculating are normal effects of clicking links and buttons. "
+               f"Overall goal: {goal}. ")
         for name, text in VERIFY_QUESTIONS.items():
-            questions[name] = {"type": "noul", "criteria": text, "instructions": ctx}
+            questions[name] = {"type": "noul", "instructions": ctx + text}
     state = {
         "page": {"url": obs["url"], "title": obs["title"], "open_dialog": obs.get("modal"), "text": obs["text"]},
-        "elements": [{k: v for k, v in e.items() if k not in ("options",)} | ({"options": [o["label"] for o in e["options"]]} if "options" in e else {})
+        "elements": [{k: v for k, v in e.items() if k != "options"} | ({"options": [o["label"] for o in e["options"]]} if "options" in e else {})
                      for e in obs["elements"]],
         "recent_actions": history[-10:],
     }

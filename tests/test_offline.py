@@ -22,6 +22,7 @@ PLAN = [  # (operation, label substring, input name)
     ("CLICK", "Charlotte, NC", None),
     ("TYPE_TEXT", "Home price", "home_price"),
     ("CLICK", "Done", None),
+    ("DONE", None, None),          # end of node 1: county dialog is open
     ("CLICK", "Mecklenburg", None),
     ("CLICK", "Done", None),
     ("CLICK", "30-Year Fixed Rate", None),
@@ -55,12 +56,19 @@ class FakeJev:
         target = None
         if op != "DONE":
             cands = q.get(op.lower() + "_target", {}).get("criteria", {})
-            target = next((k for k, v in cands.items() if f'"{label}"' in v["element"] or (label in v["element"] and op != "CLICK")), None)
+            target = next((k for k, v in cands.items() if f'"{label}"' in v or (label in v and op != "CLICK")), None)
             if target is None:  # expected element not on screen yet (e.g. rates reloading)
                 op = "WAIT"
-        if op == "DONE" and "based on a home in Charlotte" not in json.dumps(body["state"]["page"]) and "Monthly payment" not in json.dumps(body["state"]["page"]):
-            op = "WAIT"
-        p = 0.55 if self.low_conf_at is not None and self.calls == self.low_conf_at else 0.97
+        page = json.dumps(body["state"]["page"])
+        if op == "DONE":
+            final = self.i >= len(PLAN) - 1
+            if final and "Monthly payment" not in page:
+                op = "WAIT"
+            elif not final and "Select a County" not in page:
+                op = "WAIT"
+            else:
+                self.i += 1
+        p = 0.45 if self.low_conf_at is not None and self.calls == self.low_conf_at else 0.97  # below the read-only 0.50 bar (D22)
         ans["operation"] = self.choice(op, q["operation"]["criteria"], p)
         if target:
             ans[op.lower() + "_target"] = self.choice(target, q[op.lower() + "_target"]["criteria"])
@@ -99,7 +107,7 @@ def main():
         esc = [e for e in hist if e["type"] == "escalation"]
         if esc:
             print("  escalation:", {k: esc[0].get(k) for k in ('reason', 'subgoal', 'adopted')})
-        outs = next((e for e in hist if e["type"] == "outputs"), {}).get("outputs", {})
+        outs = next((e for e in reversed(hist) if e["type"] == "outputs"), {}).get("outputs", {})
         print("  outputs:", json.dumps(outs)[:300])
         print(f"  excel exists={out.exists()}  screencast frames={nframes}  metrics={m}")
         ok &= res["status"] == "success" and out.exists() and nframes > 0 and len(outs.get("rate_details", [])) >= 6

@@ -47,6 +47,8 @@ class EventBus:
 
     def emit(self, type_: str, data: dict):
         ev = {"type": type_, "t": time.time(), **data}
+        brief = {k: v for k, v in data.items() if k not in ("obs", "request", "raw_answers", "metrics")}
+        print(f"[{type_}] {json.dumps(brief, default=str)[:300]}", flush=True)
         with self.lock:
             self.history.append(ev)
             for q in self.listeners:

@@ -21,6 +21,13 @@ ROOT = Path(__file__).parent
 CONFIG = json.loads((ROOT / "config.json").read_text())
 AOP_PATH = ROOT / CONFIG.get("aop", "aop/wf_mortgage_rates.json")
 
+try:
+    from navigator.env import load_env
+    load_env()
+except ImportError:
+    pass
+
+
 FRAMES = FrameStore()
 BUS = EventBus()
 RUN_LOCK = threading.Lock()
