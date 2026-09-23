@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Fixture: mortgage rates</title>
+<style>
+body{font-family:sans-serif;margin:0}
+.dialog{position:fixed;left:30%;top:10%;width:420px;background:#fff;border:1px solid #999;padding:16px}
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.4)}
+.hidden{display:none}
+.radio{cursor:pointer;padding:4px}
+.rate{height:120px;border:1px solid #ddd;margin:8px}
+</style></head>
+<body>
+<!-- structures observed on the live walk: two "Check rates" items, native select, autocomplete,
+     auto-recalculated down payment, custom div radios that re-render, async reload, VA distractor,
+     hidden privacy dialog, hashed-class label/value pairs; plus an open shadow root -->
+<div role="dialog" aria-label="privacy" class="hidden">Your opt-out preference signal is honored</div>
+<main>
+  <a href="#all">Check all rates</a>
+  <section aria-label="Interest rates today" role="region">
+    <button id="cr" aria-expanded="false" aria-label="Check rates opens dropdown">Check rates</button>
+    <form id="crform" class="hidden" onsubmit="return false">
+      <select id="rt"><option value="m">Mortgage rates</option><option value="c">Savings and CDs rates</option></select>
+      <button type="submit" id="go">Go</button>
+    </form>
+  </section>
+  <p id="summary">These rates are based on a home in Austin, TX with a purchase price of $400,000 and a down payment of $80,000.</p>
+  <a href="#change" id="change">Change rate inputs</a>
+  <price-card></price-card>
+  <div id="rates"></div>
+  <p>Rates, terms, and fees as of 9/22/2026 10:15 AM Eastern Daylight Time and subject to change without notice.</p>
+</main>
+<div id="layer"></div>
+<script>
+const $ = s => document.querySelector(s);
+customElements.define('price-card', class extends HTMLElement {
+  constructor(){ super(); const r = this.attachShadow({mode:'open'});
+    r.innerHTML = '<label for="n">Nickname</label><input id="n" value="">'; }
+});
+$('#cr').onclick = () => { $('#crform').classList.toggle('hidden'); $('#cr').setAttribute('aria-expanded', 'true'); };
+$('#go').onclick = () => { history.pushState({}, '', '#mortgage/rates'); document.title = 'Current mortgage rates'; };
+const products = ['15-Year Fixed Rate', '30-Year Fixed-Rate VA', '7/6-Month ARM', '30-Year Fixed Rate'];
+function renderRates(){ $('#rates').innerHTML = products.map((p,i) => `<div class="rate"><a href="#p${i}" data-p="${p}">${p}</a> <span>7.000%</span></div>`).join('');
+  document.querySelectorAll('#rates a').forEach(a => a.onclick = (e) => { e.preventDefault(); details(a.dataset.p); }); }
+renderRates();
+let state = {city: 'Austin, TX', price: 400000, down: 80000, county: null};
+$('#change').onclick = (e) => { e.preventDefault(); inputs(); };
+function inputs(){
+  $('#layer').innerHTML = `<div class="scrim"></div><div class="dialog" role="dialog" aria-modal="true">
+    <h2>Change rate inputs</h2><button aria-label="" id="x"><svg width="10" height="10"></svg></button>
+    <label for="city">City, State</label><input id="city" aria-autocomplete="list" aria-controls="lb" value="${state.city}">
+    <div role="listbox" id="lb"></div>
+    <label for="price">Home price</label><input id="price" value="$${state.price.toLocaleString()}">
+    <label for="down">Down payment amount</label><input id="down" value="$${state.down.toLocaleString()}">
+    <button id="done1" disabled>Done</button><button id="cancel1">Cancel</button></div>`;
+  let picked = false;
+  $('#city').addEventListener('input', () => { picked = false; $('#done1').disabled = true;
+    const q = $('#city').value.split(',')[0].trim();
+    setTimeout(() => { $('#lb').innerHTML = q.length < 3 ? '' : ['AR','IA','MI','NC','TN'].map(s => `<div role="option">${q}, ${s}</div>`).join('');
+      document.querySelectorAll('#lb [role=option]').forEach(o => o.onclick = () => { $('#city').value = o.textContent; $('#lb').innerHTML=''; picked = true; $('#done1').disabled = false; }); }, 250); });
+  $('#price').addEventListener('blur', () => { const n = parseInt($('#price').value.replace(/\D/g,'')) || 0; $('#price').value = '$' + n.toLocaleString(); $('#down').value = '$' + Math.round(n * .2).toLocaleString(); });
+  $('#done1').onclick = () => { state.city = $('#city').value; state.price = parseInt($('#price').value.replace(/\D/g,'')); state.down = Math.round(state.price * .2); county(); };
+  $('#cancel1').onclick = $('#x').onclick = () => { $('#layer').innerHTML = ''; };
+}
+function county(){
+  const render = (sel) => { $('#layer').innerHTML = `<div class="scrim"></div><div class="dialog" role="dialog" aria-modal="true">
+    <h2>Select a County</h2><div role="radiogroup"><span>County</span>
+    ${['Cabarrus','Mecklenburg','Union'].map(c => `<div class="radio" role="radio" aria-checked="${c===sel}"><span>${c}</span></div>`).join('')}
+    <input type="hidden" value="${sel||''}"></div><button id="done2" ${sel ? '' : 'disabled'}>Done</button><button id="cancel2">Cancel</button></div>`;
+    document.querySelectorAll('[role=radio]').forEach(r => r.onclick = () => render(r.textContent.trim()));   // re-render, like the real site
+    $('#done2').onclick = () => { state.county = sel; $('#layer').innerHTML = '';
+      setTimeout(() => { $('#summary').textContent = `These rates are based on a home in ${state.city} with a purchase price of $${state.price.toLocaleString()} and a down payment of $${state.down.toLocaleString()}.`; renderRates(); }, 1500); };
+    $('#cancel2').onclick = () => { $('#layer').innerHTML = ''; }; };
+  render(null);
+}
+function details(p){
+  $('#layer').innerHTML = `<div class="scrim"></div><div class="dialog" role="dialog" aria-modal="true"><h2>${p}, undefined</h2>
+    <p>Predictable payments over this longer term loan.</p><div>
+    ${[['Credit score','760'],['Location', state.city],['Loan amount','$'+(state.price-state.down).toLocaleString()],['APR','7.215%'],['Interest rate','7.000%']]
+      .map(([k,v]) => `<div class="index__wrapper___dh9Pc"><div class="index__item___Fb24v"><span>${k}</span><span></span></div><div class="index__value___jTPdb">${v}</div></div>`).join('')}
+    <div class="index__wrapper___dh9Pc"><div><span>Monthly payment</span><span></span></div><div><div>$1,597</div><div>Includes $0 mortgage insurance.</div></div></div>
+    </div><button id="x2" aria-label="Close">×</button></div>`;
+  $('#x2').onclick = () => { $('#layer').innerHTML = ''; };
+}
+</script>
+</body></html>

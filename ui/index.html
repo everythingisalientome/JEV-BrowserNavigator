@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>jev × browser navigator</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root{--bg:#F2F1EC;--ink:#16181A;--muted:#3F4449;--faint:#5E6368;--panel:#E6E5DE;--card:#FFFFFF;--green:#146C43;--greenbg:#D8EDE1;--track:#EAE9E3;--dim:#C7C6BF;--amber:#A15C07;--red:#B42318;--dark:#1C1D20;
+--mono:'IBM Plex Mono',ui-monospace,monospace;--sans:'IBM Plex Sans',system-ui,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);height:100vh;display:flex;flex-direction:column;padding:18px 22px 10px;gap:12px;overflow:hidden}
+.mono{font-family:var(--mono)}
+header{display:flex;justify-content:space-between;align-items:flex-start}
+.kicker{font-size:14px;color:var(--muted)} .kicker b{color:var(--ink)}
+h1{margin:4px 0;font-size:28px;letter-spacing:-.5px}
+.sub{font-size:13px;color:var(--muted)}
+.tabs{display:flex;gap:22px;margin-top:8px;font-size:12px;font-weight:600}
+.tabs button{background:none;border:0;padding:0 0 6px;font:inherit;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent}
+.tabs button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--ink)}
+.tabs button:focus-visible,button:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+.status{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:1px;padding:5px 10px;border-radius:999px;background:var(--panel);color:var(--muted)}
+.status.running{background:var(--greenbg);color:var(--green)} .status.handoff{background:#F7E6CF;color:var(--amber)} .status.error{background:#F6DADA;color:var(--red)}
+.rule{height:1px;background:var(--ink)}
+main{flex:1;display:flex;gap:16px;min-height:0}
+/* left */
+.browser{flex:0 0 49%;display:flex;flex-direction:column;background:var(--dark);border-radius:10px;overflow:hidden}
+.chrome{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid #2E3035}
+.dots{display:flex;gap:6px}.dots i{width:10px;height:10px;border-radius:50%;display:block}
+.url{flex:1;font-family:var(--mono);font-size:11px;color:#C9CCD1;background:#26282C;padding:5px 10px;border-radius:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.live{font-family:var(--mono);font-size:10px;color:#8C9096;letter-spacing:1px}
+.screen{position:relative;flex:1;display:flex;align-items:flex-start;justify-content:center;overflow:hidden;background:#111214}
+.screen img{max-width:100%;max-height:100%;display:block}
+.overlay{position:absolute;pointer-events:none}
+.mark{position:absolute;border:1px solid rgba(20,108,67,.35);border-radius:3px}
+.mark span{position:absolute;top:-1px;left:-1px;font:600 9px var(--mono);background:var(--ink);color:#fff;padding:0 3px;border-radius:2px}
+.mark.chosen{border:2px solid var(--green);background:rgba(20,108,67,.12)}
+.mark.chosen span{background:var(--green)}
+.idle{color:#8C9096;font-size:13px;margin-top:40%}
+/* centre */
+.steps{flex:0 0 29%;display:flex;flex-direction:column;gap:8px;min-height:0}
+.colhead{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;letter-spacing:1px;color:var(--muted)}
+.list{flex:1;overflow:auto;display:flex;flex-direction:column;gap:6px;padding-right:4px}
+.row{display:grid;grid-template-columns:24px 84px minmax(0,1fr) auto;gap:8px;align-items:center;font-size:12px;padding:6px 10px;background:var(--card);border-radius:6px}
+.row .op{font-family:var(--mono);font-size:10px;font-weight:600;color:var(--green)}
+.row .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .ck{font-family:var(--mono);font-size:10px;color:var(--faint)}
+.row.bad .ck{color:var(--red)} .row.esc{background:#FBF1E3} .row.esc .op{color:var(--amber)}
+.current{background:var(--card);border:1.5px solid var(--ink);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.current h3{margin:0;font-size:13px;font-weight:600}
+.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.lab{font-family:var(--mono);font-size:10px;letter-spacing:1px;color:var(--faint);margin-bottom:4px}
+.bar{display:grid;grid-template-columns:minmax(0,96px) minmax(0,1fr) 34px;gap:6px;align-items:center;font-size:11px;margin-bottom:4px}
+.bar .n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar .tr{height:8px;background:var(--track);border-radius:4px}.bar .tr i{display:block;height:8px;border-radius:4px;background:var(--dim)}
+.bar.win .tr i{background:var(--green)}.bar.win .n{font-weight:600}
+.bar .v{font-family:var(--mono);color:var(--faint);text-align:right}
+.flags{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.flag{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;padding:5px 8px;background:var(--bg);border-radius:6px}
+.flag.hot{background:#F6DADA;color:var(--red)}
+.readback{font-family:var(--mono);font-size:11px;color:var(--green)} .readback.bad{color:var(--red)}
+/* right */
+.metrics{flex:1;display:flex;flex-direction:column;gap:10px;min-width:0;overflow:auto}
+.model{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:1px;color:var(--green)}
+.clock{font-family:var(--mono);font-size:44px;font-weight:600;line-height:1}
+.box{background:var(--panel);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.box.white{background:var(--card)}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px}
+.stat b{display:block;font-family:var(--mono);font-size:18px;font-weight:600}.stat span{font-size:10px;color:var(--muted)}
+.stack{display:flex;height:10px;border-radius:5px;overflow:hidden;background:#D2D1CA}
+.legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px 10px;font-size:10px;color:var(--muted)}
+.legend i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px}
+.kv{display:flex;justify-content:space-between;font-size:11px;gap:8px}.kv span:last-child{font-family:var(--mono);text-align:right}
+.note{font-size:10px;color:var(--muted)}
+.controls{display:flex;gap:8px;margin-top:auto;align-items:flex-end}
+.controls button{font:600 13px var(--sans);background:var(--ink);color:#fff;border:0;border-radius:6px;padding:0 18px;height:44px;cursor:pointer}
+.controls button:disabled{opacity:.5;cursor:default}
+.controls label{flex:1;display:flex;flex-direction:column;font-size:10px;color:var(--muted);gap:2px}
+.controls input{font:12px var(--sans);height:30px;border:1px solid var(--ink);border-radius:6px;padding:0 8px;background:#fff}
+footer{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);border-top:1px solid var(--ink);padding-top:6px}
+/* ask tab */
+#ask{flex:1;display:none;gap:16px;min-height:0}
+#ask pre{flex:1;margin:0;overflow:auto;background:var(--dark);color:#D9DBDE;font:11px/1.5 var(--mono);padding:14px;border-radius:10px;white-space:pre-wrap}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="kicker"><b>jev</b> × browser navigator</div>
+    <h1 id="headline">1 goal. 0 steps. In 0.0 seconds.</h1>
+    <div class="sub">One Jev request per step. Typed choices over the page's own elements: no selectors, no generated text, nothing parsed.</div>
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tab-ask" aria-selected="false">1 · What we ask</button>
+      <button role="tab" id="tab-run" aria-selected="true">2 · Run</button>
+    </div>
+  </div>
+  <div class="status" id="status">READY</div>
+</header>
+<div class="rule"></div>
+
+<main id="run">
+  <section class="browser" aria-label="Live browser">
+    <div class="chrome">
+      <div class="dots"><i style="background:#E0443E"></i><i style="background:#DEA123"></i><i style="background:#1AAB29"></i></div>
+      <div class="url" id="url">about:blank</div>
+      <div class="live">LIVE · CDP SCREENCAST</div>
+    </div>
+    <div class="screen" id="screen">
+      <img id="frame" alt="Live view of the agent's browser" src="/screen">
+      <div class="overlay" id="overlay"></div>
+    </div>
+  </section>
+
+  <section class="steps" aria-label="Steps">
+    <div class="colhead"><span id="nodeName">STEPS</span><span id="stepCount">0</span></div>
+    <div class="list" id="list"></div>
+    <div class="current" id="current" hidden>
+      <h3 id="curTitle"></h3>
+      <div class="two">
+        <div><div class="lab">OPERATION</div><div id="opBars"></div></div>
+        <div><div class="lab">TARGET</div><div id="tgBars"></div></div>
+      </div>
+      <div>
+        <div class="lab" id="verifyLabel">VERIFYING PREVIOUS STEP</div>
+        <div class="flags" id="flags"></div>
+      </div>
+      <div class="readback" id="readback"></div>
+    </div>
+  </section>
+
+  <section class="metrics" aria-label="Jev metrics">
+    <div>
+      <div class="model" id="modelName">TYPESAFE/JEV-1.13</div>
+      <div class="clock" id="clock">00.00</div>
+      <div class="note mono">SECONDS ELAPSED</div>
+    </div>
+    <div class="box"><b id="phase" style="font-size:14px">Idle</b><span class="note" id="phaseSub">Press Start to run the AOP.</span></div>
+    <div class="grid2">
+      <div class="stat"><b id="m-req">0</b><span>Jev requests</span></div>
+      <div class="stat"><b id="m-lat">— ms</b><span>median decision latency</span></div>
+      <div class="stat"><b id="m-tok">0</b><span id="m-tok-l">input tokens</span></div>
+      <div class="stat"><b id="m-cost">$0.0000</b><span>Jev cost</span></div>
+      <div class="stat"><b id="m-esc">0</b><span>escalations · gpt-4o-mini</span></div>
+      <div class="stat"><b id="m-ver">0 / 0</b><span>steps verified by readback</span></div>
+    </div>
+    <div class="box">
+      <div class="lab">WHERE THE TIME GOES</div>
+      <div class="stack" id="stack"></div>
+      <div class="legend" id="legend"></div>
+    </div>
+    <div class="box">
+      <div class="lab">POLICY (IN CODE, NOT IN THE MODEL)</div>
+      <div id="policy"></div>
+    </div>
+    <div class="box white">
+      <div class="lab">OUTPUTS</div>
+      <div id="outputs"><div class="kv"><span>nothing captured yet</span><span></span></div></div>
+    </div>
+    <div class="controls">
+      <button id="start">Start</button>
+      <label>City, State<input id="v-city" value="Charlotte, NC"></label>
+      <label>Home price<input id="v-price" value="300000"></label>
+      <label>County<input id="v-county" value="Mecklenburg"></label>
+    </div>
+  </section>
+</main>
+
+<section id="ask" aria-label="What we ask">
+  <pre id="aopView">Loading AOP…</pre>
+  <pre id="reqView">The exact request sent to Jev appears here after the first step.</pre>
+</section>
+
+<footer>
+  <div>Decisions by typesafe/jev-1.13 via OpenRouter · escalation by openai/gpt-4o-mini. Timings are wall-clock, network and page waits included. Jev cost = input tokens × $0.042/M, output free.</div>
+  <div class="mono" id="foot-tok">0 input tokens</div>
+</footer>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const COLORS = {decide: '#146C43', act: '#5A8FB8', wait: '#C9B37E', escalate: '#A15C07'};
+const NAMES = {decide: 'Jev decisions', act: 'browser actions', wait: 'page waits', escalate: 'escalation'};
+let lastObs = null, chosen = null, t0 = null, timer = null, steps = 0, policyShown = false;
+
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+function fmtP(p) { return p == null ? '—' : p.toFixed(2); }
+
+// ---- tabs ----
+function show(tab) {
+  $('tab-run').setAttribute('aria-selected', tab === 'run'); $('tab-ask').setAttribute('aria-selected', tab === 'ask');
+  $('run').style.display = tab === 'run' ? 'flex' : 'none'; $('ask').style.display = tab === 'ask' ? 'flex' : 'none';
+}
+$('tab-run').onclick = () => show('run'); $('tab-ask').onclick = () => show('ask');
+fetch('/aop').then(r => r.json()).then(a => { $('aopView').textContent = 'AOP · ' + a.procedure_id + ' v' + a.version + '\n\n' + JSON.stringify(a.workflow_graph, null, 2); });
+
+// ---- overlay: numbered element marks scaled onto the live frame ----
+function drawOverlay() {
+  const ov = $('overlay'), img = $('frame');
+  ov.replaceChildren();
+  if (!lastObs || !img.naturalWidth) return;
+  const s = img.clientWidth / lastObs.viewport.w;
+  ov.style.left = img.offsetLeft + 'px'; ov.style.top = img.offsetTop + 'px';
+  ov.style.width = img.clientWidth + 'px'; ov.style.height = img.clientHeight + 'px';
+  for (const r of lastObs.rects) {
+    if (r.y + r.h < 0 || r.y > lastObs.viewport.h) continue;
+    const m = el('div', 'mark' + (chosen === r.index ? ' chosen' : ''));
+    Object.assign(m.style, {left: r.x * s + 'px', top: r.y * s + 'px', width: r.w * s + 'px', height: r.h * s + 'px'});
+    m.append(el('span', null, r.index)); ov.append(m);
+  }
+}
+$('frame').addEventListener('load', drawOverlay); window.addEventListener('resize', drawOverlay);
+
+// ---- rendering helpers ----
+function bars(host, dist, winner, labelFor) {
+  host.replaceChildren();
+  const entries = Object.entries(dist || {}).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  if (!entries.length) { host.append(el('div', 'note', 'no distribution returned')); return; }
+  for (const [k, p] of entries) {
+    const row = el('div', 'bar' + (k === winner ? ' win' : ''));
+    row.append(el('div', 'n', labelFor ? labelFor(k) : k));
+    const tr = el('div', 'tr'), i = document.createElement('i'); i.style.width = Math.round(p * 100) + '%'; tr.append(i); row.append(tr);
+    row.append(el('div', 'v', fmtP(p))); host.append(row);
+  }
+}
+function elemLabel(id) {
+  const idx = String(id).split(':')[0];
+  const e = lastObs && lastObs.elements.find(x => x.index === idx);
+  if (!e) return '[' + id + ']';
+  if (String(id).includes(':')) { const o = (e.options || []).find(o => o.index === id); return '[' + id + '] ' + (o ? o.label : ''); }
+  return '[' + idx + '] ' + e.label;
+}
+function addRow(n, op, text, check, cls) {
+  const r = el('div', 'row' + (cls ? ' ' + cls : ''));
+  r.append(el('div', 'mono', n), el('div', 'op', op), el('div', 't', text), el('div', 'ck', check));
+  $('list').append(r); $('list').scrollTop = $('list').scrollHeight;
+}
+function metrics(m) {
+  if (!m) return;
+  $('m-req').textContent = m.jev_requests;
+  $('m-lat').textContent = m.median_latency_ms == null ? '— ms' : m.median_latency_ms + ' ms';
+  $('m-tok').textContent = m.input_tokens.toLocaleString();
+  $('m-tok-l').textContent = m.tokens_measured ? 'input tokens (measured)' : 'input tokens (estimated)';
+  $('m-cost').textContent = '$' + m.jev_cost_usd.toFixed(4) + (m.tokens_measured ? '' : ' est.');
+  $('m-esc').textContent = m.escalations;
+  $('m-ver').textContent = m.verified + ' / ' + m.steps;
+  $('foot-tok').textContent = m.input_tokens.toLocaleString() + ' input tokens';
+  const b = m.time_buckets_s, tot = Object.values(b).reduce((a, c) => a + c, 0) || 1;
+  $('stack').replaceChildren(); $('legend').replaceChildren();
+  for (const k of Object.keys(COLORS)) {
+    const seg = document.createElement('div'); seg.style.width = (b[k] / tot * 100) + '%'; seg.style.background = COLORS[k]; $('stack').append(seg);
+    const lg = el('div'); const sw = document.createElement('i'); sw.style.background = COLORS[k]; lg.append(sw, document.createTextNode(NAMES[k] + ' ' + b[k].toFixed(1) + ' s')); $('legend').append(lg);
+  }
+  $('headline').textContent = `1 goal. ${m.steps} steps. In ${m.elapsed_s.toFixed(1)} seconds.`;
+}
+function status(txt, cls) { const s = $('status'); s.textContent = txt; s.className = 'status' + (cls ? ' ' + cls : ''); }
+
+// ---- event stream ----
+const es = new EventSource('/events');
+es.onmessage = (msg) => {
+  const ev = JSON.parse(msg.data);
+  switch (ev.type) {
+    case 'run_started':
+      $('list').replaceChildren(); steps = 0; t0 = ev.t; status('RUNNING', 'running');
+      clearInterval(timer); timer = setInterval(() => { $('clock').textContent = (Date.now() / 1000 - t0).toFixed(2).padStart(5, '0'); }, 50);
+      $('outputs').replaceChildren(el('div', 'kv', 'waiting for the task to finish'));
+      if (!policyShown) renderPolicy(); break;
+    case 'node_started':
+      $('nodeName').textContent = 'STEPS · ' + ev.node; $('phase').textContent = ev.node.replaceAll('_', ' ');
+      $('phaseSub').textContent = ev.goal || ev.kind; break;
+    case 'observation':
+      lastObs = ev.obs; $('url').textContent = ev.obs.url; chosen = null; drawOverlay(); break;
+    case 'jev_request':
+      $('reqView').textContent = 'Step ' + ev.step + ' · request\n' + JSON.stringify(ev.request, null, 2) + '\n\nanswers\n' + JSON.stringify(ev.raw_answers, null, 2); break;
+    case 'decision': {
+      $('current').hidden = false;
+      const op = ev.operation.value, tg = ev.target ? ev.target.value : null;
+      chosen = tg ? String(tg).split(':')[0] : null; drawOverlay();
+      $('curTitle').textContent = `Step ${ev.step} · ${op}` + (tg ? ' → ' + elemLabel(tg) : '') + (ev.value ? ' ← ' + ev.value.value : '') + `  ·  ${ev.latency_ms} ms`;
+      bars($('opBars'), ev.operation.dist, op); bars($('tgBars'), ev.target ? ev.target.dist : {}, tg, elemLabel);
+      $('verifyLabel').textContent = ev.verifying ? 'VERIFYING: ' + ev.verifying : 'VERIFYING PREVIOUS STEP (none yet)';
+      $('flags').replaceChildren();
+      for (const [k, v] of Object.entries(ev.flags || {})) {
+        const hot = (k === 'unexpected_change' || k === 'human_review_required') && v >= 0.5;
+        const f = el('div', 'flag' + (hot ? ' hot' : '')); f.append(el('span', null, k), el('span', null, 'p ' + fmtP(v))); $('flags').append(f);
+      }
+      if (ev.verdict.verdict !== 'ACT') addRow('·', ev.verdict.verdict, ev.verdict.reason, '', ev.verdict.verdict === 'ESCALATE' ? 'esc' : 'bad');
+      metrics(ev.metrics); break;
+    }
+    case 'action':
+      steps += 1; $('stepCount').textContent = steps;
+      addRow(ev.step, ev.describe.split(' ')[0], ev.describe.replace(/^\S+\s/, ''), (ev.ok ? '✓ ' : '✗ ') + ev.ms + ' ms', ev.ok ? '' : 'bad');
+      $('readback').textContent = 'readback (code): ' + ev.readback; $('readback').className = 'readback' + (ev.ok ? '' : ' bad');
+      metrics(ev.metrics); break;
+    case 'escalation':
+      addRow('·', 'ESCALATED', ev.error ? ev.error : `${ev.diagnosis || ''} → subgoal: ${ev.subgoal || '—'}; adopted ${ev.adopted ? ev.adopted.length : 0} locator(s)`, ev.latency_ms ? ev.latency_ms + ' ms' : '', 'esc');
+      metrics(ev.metrics); break;
+    case 'acceptance':
+      for (const r of ev.results) addRow('✓', 'ACCEPT', r.check + ': ' + r.detail, r.ok ? 'pass' : 'fail', r.ok ? '' : 'bad'); break;
+    case 'outputs': {
+      $('outputs').replaceChildren();
+      for (const [k, v] of Object.entries(ev.outputs)) {
+        const n = Array.isArray(v) ? v.length + ' fields' : (v == null ? 'missing' : String(v));
+        const row = el('div', 'kv'); row.append(el('span', null, k), el('span', null, n)); $('outputs').append(row);
+        if (Array.isArray(v)) for (const f of v.slice(0, 12)) { const r2 = el('div', 'kv note'); r2.append(el('span', null, f.field), el('span', null, f.value)); $('outputs').append(r2); }
+      }
+      break;
+    }
+    case 'node_finished':
+      addRow('■', ev.status, ev.node + ': ' + ev.reason, '', ev.status === 'DONE' ? '' : 'bad'); metrics(ev.metrics); break;
+    case 'native_dialog':
+      addRow('!', 'DIALOG', ev.type + ': ' + ev.message + ' (dismissed)', '', 'bad'); break;
+    case 'error':
+      addRow('!', 'ERROR', ev.message, '', 'bad'); break;
+    case 'run_finished':
+      clearInterval(timer); metrics(ev.metrics);
+      status(ev.status === 'success' ? 'DONE' : ev.status.toUpperCase(), ev.status === 'success' ? 'running' : (ev.status === 'handoff' ? 'handoff' : 'error'));
+      $('phase').textContent = ev.status === 'success' ? 'Finished' : 'Stopped: ' + ev.status; $('phaseSub').textContent = ev.reason || '';
+      $('start').disabled = false; break;
+  }
+};
+
+function renderPolicy() {
+  fetch('/aop').then(r => r.json()).then(a => {
+    const p = Object.assign({min_operation_p: .8, min_target_p: .8, flag_halt_p: .5}, (a.global_config || {}).policy || {});
+    const node = Object.values(a.workflow_graph.nodes).find(n => n.kind === 'ui_task') || {};
+    const rows = [['Act if operation p ≥', p.min_operation_p.toFixed(2)], ['Act if target p ≥', p.min_target_p.toFixed(2)],
+      ['Hand off if unexpected_change ≥', p.flag_halt_p.toFixed(2)], ['Side effects', node.side_effects === 'none' ? 'none (read-only)' : 'gated']];
+    $('policy').replaceChildren(...rows.map(([k, v]) => { const d = el('div', 'kv'); d.append(el('span', null, k), el('span', null, v)); return d; }),
+      el('div', 'note', 'Below threshold: escalate to gpt-4o-mini for a subgoal or new candidates. Jev still makes the pick.'));
+    policyShown = true;
+  });
+}
+renderPolicy();
+
+$('start').onclick = async () => {
+  $('start').disabled = true;
+  const variables = {city_state: $('v-city').value, home_price: $('v-price').value, county: $('v-county').value};
+  const r = await fetch('/run', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({variables})});
+  if (!r.ok) { const e = await r.json().catch(() => ({})); status('ERROR', 'error'); $('phaseSub').textContent = e.error || ('HTTP ' + r.status); $('start').disabled = false; }
+};
+</script>
+</body>
+</html>

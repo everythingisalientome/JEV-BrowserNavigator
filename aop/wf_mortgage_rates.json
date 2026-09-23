@@ -1,0 +1,63 @@
+{
+  "procedure_id": "wf-mortgage-rates-extract",
+  "version": "0.1.0",
+  "description": "Get today's 30-year fixed mortgage rate details for a city, home price and county, and export them to Excel.",
+  "global_config": {
+    "escalation": {"model": "openai/gpt-4o-mini"},
+    "policy": {"min_operation_p": 0.80, "min_target_p": 0.80, "flag_halt_p": 0.50, "max_steps": 25}
+  },
+  "variables_schema": {
+    "required": {
+      "city_state": {"type": "string", "origin": "user_strict", "default": "Charlotte, NC"},
+      "home_price": {"type": "string", "origin": "user_strict", "default": "300000"},
+      "county":     {"type": "string", "origin": "user_strict", "default": "Mecklenburg"},
+      "product":    {"type": "string", "origin": "user_strict", "default": "30-Year Fixed Rate"}
+    },
+    "optional": {
+      "start_url":    {"type": "string", "origin": "user_strict", "default": "https://www.wellsfargo.com/"},
+      "export_path":  {"type": "string", "origin": "user_strict", "default": "./out/mortgage_rates.xlsx"},
+      "rate_details": {"type": "array",  "origin": "system_captured"},
+      "rates_as_of":  {"type": "string", "origin": "system_captured"}
+    }
+  },
+  "workflow_graph": {
+    "start_node": "get_rate_details",
+    "nodes": {
+      "get_rate_details": {
+        "kind": "ui_task",
+        "start_url": "{{start_url}}",
+        "goal": "Go to mortgage rates, change the rate inputs to {{city_state}} with home price {{home_price}} and county {{county}}, then open the details for {{product}}.",
+        "inputs": ["city_state", "home_price", "county"],
+        "rules": [
+          "In the Interest rates today card, use the Check rates dropdown button, not the 'Check all rates' link.",
+          "City, State is an autocomplete: type it, then click the suggestion that matches {{city_state}} exactly.",
+          "Down payment fields recalculate automatically when home price changes; that is expected, leave them.",
+          "After the county is confirmed, rates reload after a few seconds; wait for the summary to show {{city_state}}.",
+          "{{product}} is not the VA product; match the name exactly."
+        ],
+        "side_effects": "none",
+        "acceptance": [
+          {"check": "text_visible", "text": "based on a home in {{city_state}}", "timeout_ms": 10000},
+          {"check": "dialog_visible", "contains_text": "{{product}}"}
+        ],
+        "outputs": {
+          "rate_details": {"from": "dialog_fields", "required": ["APR", "Interest rate", "Monthly payment"]},
+          "rates_as_of":  {"from": "text_match", "pattern": "as of (.+?) and subject"}
+        },
+        "next": "export_to_excel",
+        "on_handoff": "human_review",
+        "on_blocked": "human_review"
+      },
+      "export_to_excel": {
+        "kind": "data_task",
+        "task": "write_excel",
+        "data": "{{rate_details}}",
+        "path": "{{export_path}}",
+        "output_variable": "excel_path",
+        "next": "done"
+      },
+      "done":         {"kind": "end", "status": "success"},
+      "human_review": {"kind": "end", "status": "handoff", "message": "Handed to a person; see the step log for the reason."}
+    }
+  }
+}

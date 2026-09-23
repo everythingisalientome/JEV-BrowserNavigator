@@ -1,0 +1,10 @@
+{
+  "port": 8765,
+  "aop": "aop/wf_mortgage_rates.json",
+  "browser": {
+    "user_data_dir": "./.profiles/demo",
+    "headless": false,
+    "channel": null,
+    "viewport": {"width": 1280, "height": 800}
+  }
+}
