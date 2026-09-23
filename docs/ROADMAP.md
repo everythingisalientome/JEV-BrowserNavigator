@@ -21,6 +21,7 @@
 | 2 | 2026-09-23 | BLOCKED at step 4 (no progress) | 3 executed, 0 verified | 4 | 408 | 29,069 | $0.0012 | 1 (1.5 s) | Jev chose nav link "Home Loans" (0.76, then 1.0); the link opens a hover menu, not a page; three no-effect clicks. gpt-4o-mini endorsed the same route. Led to D23, D24. |
 | 3 | 2026-09-23 | HANDOFF at step 3 (flag) | 2 executed, 2 verified | 3 | 380 | 21,928 | $0.0009 | 0 | Card picked at 0.99, Go at 0.77 → rates page reached. unexpected_change = 0.50 on the navigation halted the run; next pick (Change rate inputs 0.67) was correct. Led to D25. |
 | 4 | 2026-09-23 | HANDOFF at step 14 | 10 executed, 10 verified | 14 | 363 | 56,167 | $0.0024 | 3 (4.9 s) | Reached the inputs dialog; city typed and suggestion clicked correctly; then county typed into City (hidden dependency) and "Mecklenburg, NY" chosen; LLM repeated an invalid locator 3×. Led to D26 (node split), D27 (escalation dedupe). |
+| 5 | 2026-09-23 | HANDOFF at step 10 (hard floor) | 8 executed, 8 verified | 10 | 348 | 40,516 | $0.0017 | 1 (1.5 s, helpful) | Node 1 fully completed (Done pressed, county dialog open) but acceptance was only checked on a DONE claim; Jev gave DONE 0.08 and split on the next dialog. Led to D28. |
 
 ## Next steps, in order
 

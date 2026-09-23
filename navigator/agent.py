@@ -73,6 +73,41 @@ def readback(op, target, before, after, text=None) -> tuple[bool, str]:
     return False, "unknown operation"
 
 
+async def finish_if_accepted(node, b, rt, m, esc_model, step, poll: bool) -> dict | None:
+    """Run the node's acceptance checks (D28: after every action, not only on DONE).
+    poll=False → checks run once, no waiting; poll=True → each check may wait up to its timeout_ms.
+    Returns the node result on success, None when acceptance is not (yet) met."""
+    checks_ = node.get("acceptance", [])
+    if not checks_:
+        return None
+    results = []
+    for c in checks_:
+        ok, detail = await checks.run_check(b.page, b.observe, c if poll else {**c, "timeout_ms": 0})
+        results.append({"check": c["check"], "ok": ok, "detail": detail})
+    if not all(r["ok"] for r in results):
+        if poll:
+            rt.emit("acceptance", {"step": step, "results": results})
+        return None
+    rt.emit("acceptance", {"step": step, "results": results, "auto": not poll})
+    outputs, problems = {}, []
+    for name, spec in node.get("outputs", {}).items():
+        val, status = await checks.capture(b.page, spec)
+        if spec.get("from") == "dialog_fields" and val and val["missing"]:
+            kept, _ = await escalate.extract_fields(esc_model, rt.keys["openrouter"], val["text"] or "")
+            m.escalations += 1
+            val["rows"] = val["rows"] + [{"field": f["field"], "value": f["value"], "note": "via LLM (verbatim-checked)"}
+                                         for f in kept if f["field"] not in {r["field"] for r in val["rows"]}]
+            val["missing"] = [r for r in spec.get("required", []) if r not in {x["field"] for x in val["rows"]}]
+            status = "ok" if not val["missing"] else f"missing {val['missing']}"
+        outputs[name] = val["rows"] if isinstance(val, dict) and "rows" in val else val
+        if status != "ok":
+            problems.append(f"{name}: {status}")
+    rt.emit("outputs", {"outputs": outputs, "problems": problems})
+    if problems:
+        return {"status": "HANDOFF", "reason": "; ".join(problems), "outputs": outputs}
+    return {"status": "DONE", "reason": "acceptance passed" + ("" if poll else " (checked by code after the action)"), "outputs": outputs}
+
+
 async def run_ui_task(node: dict, variables: dict, rt) -> dict:
     """rt: runtime with .browser, .emit(type, data), .keys, .cfg, .metrics"""
     b, m, cfg = rt.browser, rt.metrics, {**policy.DEFAULTS, **rt.cfg.get("policy", {})}
@@ -155,29 +190,9 @@ async def run_ui_task(node: dict, variables: dict, rt) -> dict:
             continue
 
         if verdict["verdict"] == "DONE_CHECK":
-            results = []
-            for c in node.get("acceptance", []):
-                ok, detail = await checks.run_check(b.page, b.observe, c)
-                results.append({"check": c["check"], "ok": ok, "detail": detail})
-            rt.emit("acceptance", {"step": step, "results": results})
-            if all(r["ok"] for r in results):
-                outputs, problems = {}, []
-                for name, spec in node.get("outputs", {}).items():
-                    val, status = await checks.capture(b.page, spec)
-                    if spec.get("from") == "dialog_fields" and val and val["missing"]:
-                        kept, _ = await escalate.extract_fields(esc_model, rt.keys["openrouter"], val["text"] or "")
-                        m.escalations += 1
-                        val["rows"] = val["rows"] + [{"field": f["field"], "value": f["value"], "note": "via LLM (verbatim-checked)"}
-                                                     for f in kept if f["field"] not in {r["field"] for r in val["rows"]}]
-                        val["missing"] = [r for r in spec.get("required", []) if r not in {x["field"] for x in val["rows"]}]
-                        status = "ok" if not val["missing"] else f"missing {val['missing']}"
-                    outputs[name] = val["rows"] if isinstance(val, dict) and "rows" in val else val
-                    if status != "ok":
-                        problems.append(f"{name}: {status}")
-                rt.emit("outputs", {"outputs": {k: v for k, v in outputs.items()}, "problems": problems})
-                if problems:
-                    return {"status": "HANDOFF", "reason": "; ".join(problems), "outputs": outputs}
-                return {"status": "DONE", "reason": "acceptance passed", "outputs": outputs}
+            result = await finish_if_accepted(node, b, rt, m, esc_model, step, poll=True)
+            if result:
+                return result
             done_rejections += 1
             if done_rejections >= 2:
                 return {"status": "HANDOFF", "reason": "DONE claimed twice but acceptance failed", "outputs": {}}
@@ -238,4 +253,7 @@ async def run_ui_task(node: dict, variables: dict, rt) -> dict:
             return {"status": "BLOCKED", "reason": "no progress for 3 steps", "outputs": {}}
         prev = {"describe": desc, "readback": detail, "ok": ok, "url_before": obs["url"], "url_after": after["url"]}
         obs = after
+        result = await finish_if_accepted(node, b, rt, m, esc_model, step, poll=False)  # D28
+        if result:
+            return result
     return {"status": "BLOCKED", "reason": f"step budget ({cfg['max_steps']}) exhausted", "outputs": {}}

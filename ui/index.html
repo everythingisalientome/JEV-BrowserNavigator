@@ -296,7 +296,7 @@ es.onmessage = (msg) => {
       addRow('·', 'ESCALATED', ev.error ? ev.error : `${ev.diagnosis || ''} → subgoal: ${ev.subgoal || '—'}; adopted ${ev.adopted ? ev.adopted.length : 0} locator(s)`, ev.latency_ms ? ev.latency_ms + ' ms' : '', 'esc');
       metrics(ev.metrics); break;
     case 'acceptance':
-      for (const r of ev.results) addRow('✓', 'ACCEPT', r.check + ': ' + r.detail, r.ok ? 'pass' : 'fail', r.ok ? '' : 'bad'); break;
+      for (const r of ev.results) addRow('✓', ev.auto ? 'ACCEPT·code' : 'ACCEPT', r.check + ': ' + r.detail, r.ok ? 'pass' : 'fail', r.ok ? '' : 'bad'); break;
     case 'outputs': {
       $('outputs').replaceChildren();
       for (const [k, v] of Object.entries(ev.outputs)) {
